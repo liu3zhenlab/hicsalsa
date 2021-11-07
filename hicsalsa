@@ -1,0 +1,243 @@
+#!/bin/bash
+# by Sanzhen Liu
+# 11/2021
+
+version=0.01;
+
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+usage() {
+	echo -e "${RED}Prerequirement${NC}: Java, samtools, bedtools, bwa, picard, salsa2"
+	echo -e "${RED}Usage${NC}: $0 -a <asm> -1 <read1> -2 <read2> [other options]" >&2
+	echo "       -a: assembly fasta file; required" >&2
+	echo "       -1: fastq reads 1; required" >&2
+	echo "       -2: fastq reads 2; required" >&2
+	echo "       -p: prefix (default=prefix of the assembly file)" >&2
+	echo "       -b: bwa parameter (-B8)" >&2
+	echo "       -m: minimal contig length (10000)" >&2
+	echo "       -i: number of iteractions for Salsa run (3)" >&2
+	echo "       -e: enzyme base e.g., GATC; optional" >&2
+	echo "       -r: file containing the list of contigs to be removed; optional" >&2
+	echo "       -g: expected genome size; optional" >&2
+	echo "       -f: gfa file from the assembly; optional" >&2
+	echo "       -t: number of threads (8)" >&2
+	echo "       -s: skip steps: 0 (no skip; default), 1 (skip genome index)," >&2
+	echo "                       2 (skip index and alignment" >&2
+	echo "       -v: version" >&2
+	echo "       -h: help information" >&2
+}
+
+while getopts ":a:1:2:p:b:r:m:e:i:g:f:s:t:vh" opt; do
+case $opt in
+	a) asm=$OPTARG;;
+	1) r1=$OPTARG;;
+	2) r2=$OPTARG;;
+	p) prefix=$OPTARG;;
+	b) bwapara=$OPTARG;;
+	r) clist=$OPTARG;;
+	m) minlen=$OPTARG;;
+	e) enzbase=$OPTARG;;
+	i) iteration=$OPTARG;;
+	g) genomesize=$OPTARG;;
+	f) gfa=$OPTARG;;
+	t) threads=$OPTARG;;
+	s) skip=$OPTARG;;
+	v) echo $version; exit;;
+	h) usage; exit;;
+\?) echo "Invalid options: -$OPTARG." >&2; exit;;
+:) echo "Option -$OPTARG requires an argument" >&2; exit;;
+esac
+done
+
+### check required parameters
+if [ -z $asm ] || [ -z $r1 ] || [ -z $r2 ]; then
+	echo -e "${RED}ERROR${NC}: Required parameters: -a; -1; -2." >&2
+	usage;
+	exit;
+fi
+
+### input asm
+asm_input=`realpath $asm`
+asm_path=`echo $asm_input | sed 's/[^\/]*$//g'`
+asm_file=`basename $asm_input`
+#asm_prefix=`echo $asm_file | sed 's/[.fasta$|.fas$|.fa$]//g'`
+asm_prefix=`echo $asm_file | sed 's/\.[^\.]*$//g'`
+
+if [ -z $prefix ]; then
+	prefix=$asm_prefix
+fi
+export wd=`pwd`/$prefix
+
+if [ ! -d $prefix ]; then
+	mkdir $prefix
+fi
+
+if [ -z $bwapara ]; then
+	bwapara="-B8"
+fi
+
+if [ -z $iteration ]; then
+	iteration=3
+fi
+
+if [ -z $minlen ]; then
+	minlen=10000
+fi
+
+if [ -z $genomesize ]; then
+	genomesize=false
+fi
+
+if [ -z $enzbase ]; then
+	enzbase=false
+fi
+
+if [ -z $gfa ]; then
+	gfa=false
+fi
+
+if [ -z $clist ]; then
+	clist=false
+fi
+
+if [ -z $threads ]; then
+	threads=8
+fi
+
+if [ -z $skip ]; then
+	skip=0;
+else
+	if [ $skip -ne 0 ] && [ $skip -ne 1 ] && [ $skip -ne 2 ]; then
+		echo -e "${RED}ERROR${NC}: -s must be 0, 1, or 2." >&2
+		exit;
+	fi
+fi
+
+#########################################
+# script directories
+#########################################
+pkg_path=`realpath $0 | sed 's/[^\/]*$//g'`
+utils_path=${pkg_path}/utils
+salsa_path=${pkg_path}/salsa
+
+#########################################
+# log files
+#########################################
+log_file=$wd/${prefix}.run.log
+script_log=$wd/${prefix}.scripts.log
+
+#########################################
+# modules
+#########################################
+message () {
+	curtime=`date '+%b %d %Y %T'`
+	echo -e "${RED}$curtime${NC}:$1" >>$log_file
+}
+
+createdir () {
+	if [ ! -d $1 ]; then
+		mkdir $1
+	fi
+}
+
+check_sft () {
+	pass=true
+	cmd_status=`command -v $1`
+	if [ -z $cmd_status ]; then
+		pass=false
+	fi
+	echo $pass
+}
+
+#########################################
+# check availability of sft requirements
+#########################################
+#java, samtools, bedtools, bwa, picard
+is_java=`check_sft java`
+is_samtools=`check_sft samtools`
+is_bedtools=`check_sft bedtools`
+is_bwa=`check_sft bwa`
+is_picard=`check_sft picard`
+
+all_pass=0
+if $is_java && $is_samtools && $is_bedtools && $is_bwa && $is_picard; then
+	all_pass=1
+fi
+
+if [ $all_pass -eq 1 ]; then
+	message "All software requirments passed"
+else
+	message "Some software requirments failed to detect"
+fi
+
+#########################################
+# directories
+#########################################
+echo -e "${RED}$curtime${NC}:running log" >$log_file
+echo -e "${RED}$curtime${NC}:script log" >$script_file
+
+index_dir=$wd/1_index
+createdir $index_dir
+aln_dir=$wd/2_alignment
+createdir $aln_dir
+scaf_dir=$wd/3_scaffold
+createdir $scaf_dir
+
+aln_bam=${wd}/${asm_prefix}.hic.aln.bam
+final_asm=${asm_prefix}.hicsalsa.fasta
+
+#########################################
+# index
+#########################################
+if [ $skip -ne 1 ] && [ $skip -ne 2 ]; then
+	message "indexing"
+	sh $utils_path/index.sh \
+		$asm_path \
+		$asm_file \
+		$index_dir \
+		$script_log
+else
+	message "skip indexing"
+fi
+
+#########################################
+# arima process (alignment)
+#########################################
+if [ $skip -ne 2 ] && [ $skip -ne 3 ]; then
+	message "arima processing"
+	sh $utils_path/arima.sh \
+		$asm_path \
+		$asm_file \
+		$prefix \
+		$bwapara \
+		$r1 \
+		$r2 \
+		$index_dir \
+		$aln_dir \
+		$aln_bam \
+		$utils_path \
+		$threads \
+		$script_log
+else
+	message "skip arima processing"
+fi
+
+#########################################
+# salsa
+#########################################
+message "salsa scafolding"
+sh $utils_path/salsa.sh \
+	$asm_path \
+	$asm_file \
+	$aln_bam \
+	$iteration \
+	$minlen \
+	$enzbase \
+	$genomesize \
+	$gfa \
+	$clist \
+	$index_dir \
+	$scaf_dir \
+	$salsa_path \
+	$script_log
+

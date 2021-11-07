@@ -1,0 +1,15 @@
+[0;31mNov 06 2021 10:18:43[0m:indexing
+bwa index mt.fasta
+[bwa_index] Pack FASTA... 0.01 sec
+[bwa_index] Construct BWT for the packed sequence...
+[bwa_index] 0.53 seconds elapse.
+[bwa_index] Update BWT... 0.01 sec
+[bwa_index] Pack forward-only FASTA... 0.01 sec
+[bwa_index] Construct SA from BWT and Occ... 0.19 sec
+[main] Version: 0.7.17-r1188
+[main] CMD: bwa index mt.fasta
+[main] Real time: 2.784 sec; CPU: 0.760 sec
+samtools faidx mt.fasta
+
+[0;31mNov 06 2021 10:18:46[0m:arima processing
+[0;31mNov 06 2021 10:18:59[0m:salsa scafolding
