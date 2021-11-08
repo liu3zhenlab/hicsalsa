@@ -168,13 +168,15 @@ if [ $all_pass -eq 1 ]; then
 	message "All software requirments passed"
 else
 	message "Some software requirments failed to detect"
+	echo -e "${RED}ERROR${NC}:software check failed"
+	exit
 fi
 
 #########################################
 # directories
 #########################################
 echo -e "${RED}$curtime${NC}:running log" >$log_file
-echo -e "${RED}$curtime${NC}:script log" >$script_file
+echo -e "${RED}$curtime${NC}:script log" >$script_log
 
 index_dir=$wd/1_index
 createdir $index_dir

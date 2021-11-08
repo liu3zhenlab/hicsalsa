@@ -1,0 +1,42 @@
+[0;31mNov 07 2021 18:24:33[0m:script log
+### step 0. genome indexing
+bwa index mt.fasta
+samtools faidx mt.fasta
+
+### Step 1a: FASTQ to BAM (1st)
+bwa mem -t2 -B8 /homes/liu3zhen/scripts2/hicsalsa/case/mt/1_index/mt.fasta r1.fastq | samtools view -Sb - > /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/raw/mt_1.bam
+
+samtools view -h /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/raw/mt_1.bam | perl /homes/liu3zhen/scripts2/hicsalsa//utils/filter_five_end.pl | samtools view -@2 -Sb - > /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/filtered/mt_1.bam
+
+# Remove intermediate file
+rm /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/raw/mt_1.bam
+
+### Step 2a: FASTQ to BAM (2nd)
+bwa mem -t2 -B8 /homes/liu3zhen/scripts2/hicsalsa/case/mt/1_index/mt.fasta r2.fastq | samtools view -Sb - > /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/raw/mt_2.bam
+
+### Step 2b: Filter 5' end (2nd)
+samtools view -h /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/raw/mt_2.bam | perl /homes/liu3zhen/scripts2/hicsalsa//utils/filter_five_end.pl | samtools view -@2 -Sb - > /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/filtered/mt_2.bam
+
+# Remove intermediate file
+rm /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/raw/mt_2.bam
+
+### Step 3: Filter Combiner
+perl /homes/liu3zhen/scripts2/hicsalsa//utils/two_read_bam_combiner.pl /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/filtered/mt_1.bam /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/filtered/mt_2.bam | samtools view -@2 -Sb > /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/combined/mt.bam
+
+### Step 4: sort alignments
+samtools sort -@ -n -T /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/combined/sort_tmp.bam -m1G -O bam -o /homes/liu3zhen/scripts2/hicsalsa/case/mt/mt.hic.aln.bam /homes/liu3zhen/scripts2/hicsalsa/case/mt/2_alignment/combined/mt.bam
+
+### Finished Mapping!
+
+### Step 5. convert BAM to BED for salsa
+bedtools bamtobed -i /homes/liu3zhen/scripts2/hicsalsa/case/mt/mt.hic.aln.bam > /homes/liu3zhen/scripts2/hicsalsa/case/mt/3_scaffold/mt.hic.aln.bed
+
+### Step 6. run salsa run_pipeline.py
+python /homes/liu3zhen/scripts2/hicsalsa//salsa/run_pipeline.py -a /homes/liu3zhen/scripts2/hicsalsa/case/mt/1_index/mt.fasta 	-l /homes/liu3zhen/scripts2/hicsalsa/case/mt/1_index/mt.fasta.fai -i 3 	-b /homes/liu3zhen/scripts2/hicsalsa/case/mt/3_scaffold/mt.hic.aln.bed -c 10000 -o /homes/liu3zhen/scripts2/hicsalsa/case/mt/3_scaffold  -m yes -p yes
+
+# softlink the final scaffolds
+ln -s -f /homes/liu3zhen/scripts2/hicsalsa/case/mt/3_scaffold/scaffolds_FINAL.fasta /homes/liu3zhen/scripts2/hicsalsa/case/mt/3_scaffold/../mt.hic.aln.hicsalsa.fasta
+ln -s -f /homes/liu3zhen/scripts2/hicsalsa/case/mt/3_scaffold/scaffolds_FINAL.agp /homes/liu3zhen/scripts2/hicsalsa/case/mt/3_scaffold/../mt.hic.aln.hicsalsa.agp
+
+### Salsa is ready.
+

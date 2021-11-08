@@ -13,7 +13,6 @@ echo "### step 0. genome indexing" >> $script_log
 
 echo "bwa index $asm_file" >>$script_log
 bwa index $asm_file
-echo "" >>$script_log
 
 echo "samtools faidx $asm_file" >>$script_log
 samtools faidx $asm_file

@@ -50,13 +50,13 @@ if [ ! -d $DEDUP_DIR ]; then
 	mkdir -p $DEDUP_DIR
 fi
 
-echo "### Step 1a: FASTQ to BAM (1st)" >>$SCRIPT_LOG
+echo "### Step 1.A: FASTQ to BAM (1st)" >>$SCRIPT_LOG
 echo "\
 $BWA mem -t$THREADS $BWA_OPTS $REF $FASTQ1 | $SAMTOOLS view -Sb - > $RAW_DIR/${PREFIX}_1.bam" >>$SCRIPT_LOG
 $BWA mem -t$THREADS $BWA_OPTS $REF $FASTQ1 | $SAMTOOLS view -Sb - > $RAW_DIR/${PREFIX}_1.bam
 echo >>$SCRIPT_LOG
 
-echo "### Step 1b: Filter 5' end (1st)"
+echo "### Step 2.A: Filter 5' end (1st)"
 echo "\
 $SAMTOOLS view -h $RAW_DIR/${PREFIX}_1.bam | perl $FILTER | $SAMTOOLS view -@$THREADS -Sb - > $FILT_DIR/${PREFIX}_1.bam" >>$SCRIPT_LOG
 $SAMTOOLS view -h $RAW_DIR/${PREFIX}_1.bam | perl $FILTER | $SAMTOOLS view -@$THREADS -Sb - > $FILT_DIR/${PREFIX}_1.bam
@@ -67,12 +67,12 @@ echo "rm $RAW_DIR/${PREFIX}_1.bam" >>$SCRIPT_LOG
 rm $RAW_DIR/${PREFIX}_1.bam
 echo ""  >>$SCRIPT_LOG
 
-echo "### Step 2a: FASTQ to BAM (2nd)" >>$SCRIPT_LOG
+echo "### Step 1.B: FASTQ to BAM (2nd)" >>$SCRIPT_LOG
 echo "$BWA mem -t$THREADS $BWA_OPTS $REF $FASTQ2 | $SAMTOOLS view -Sb - > $RAW_DIR/${PREFIX}_2.bam" >>$SCRIPT_LOG
 $BWA mem -t$THREADS $BWA_OPTS $REF $FASTQ2 | $SAMTOOLS view -Sb - > $RAW_DIR/${PREFIX}_2.bam
 echo "" >>$SCRIPT_LOG
 
-echo "### Step 2b: Filter 5' end (2nd)" >>$SCRIPT_LOG
+echo "### Step 2.B: Filter 5' end (2nd)" >>$SCRIPT_LOG
 echo "\
 $SAMTOOLS view -h $RAW_DIR/${PREFIX}_2.bam | perl $FILTER | $SAMTOOLS view -@$THREADS -Sb - > $FILT_DIR/${PREFIX}_2.bam" >>$SCRIPT_LOG
 $SAMTOOLS view -h $RAW_DIR/${PREFIX}_2.bam | perl $FILTER | $SAMTOOLS view -@$THREADS -Sb - > $FILT_DIR/${PREFIX}_2.bam
@@ -83,23 +83,17 @@ echo "rm $RAW_DIR/${PREFIX}_2.bam" >>$SCRIPT_LOG
 rm $RAW_DIR/${PREFIX}_2.bam
 echo >>$SCRIPT_LOG
 
-echo "### Step 3: Filter Combiner" >>$SCRIPT_LOG
+echo "### Step 3.A: Filter Combiner" >>$SCRIPT_LOG
 echo "\
 perl $COMBINER $FILT_DIR/${PREFIX}_1.bam $FILT_DIR/${PREFIX}_2.bam | $SAMTOOLS view -@$THREADS -Sb > $COMB_DIR/$PREFIX.bam" >>$SCRIPT_LOG
 perl $COMBINER $FILT_DIR/${PREFIX}_1.bam $FILT_DIR/${PREFIX}_2.bam | $SAMTOOLS view -@$THREADS -Sb > $COMB_DIR/$PREFIX.bam
 echo "" >>$SCRIPT_LOG
 
-echo "### Step 4: sort alignments" >>$SCRIPT_LOG
-echo "\
-samtools sort -@$threads -n -T $COMB_DIR/sort_tmp.bam -m1G -O bam -o $FINAL_BAM $COMB_DIR/$PREFIX.bam" >>$SCRIPT_LOG
-samtools sort -@$threads -n -T $COMB_DIR/sort_tmp.bam -m1G -O bam -o $FINAL_BAM $COMB_DIR/$PREFIX.bam
+echo "### Step 4: Start to dedup" >>$SCRIPT_LOG
+echo "$DEDUP $COMB_DIR/$PREFIX.bam $THREADS $DEDUP_DIR $FINAL_BAM $SCRIPT_LOG" >>$SCRIPT_LOG
 echo >>$SCRIPT_LOG
-
-#echo "### Step 4: Start to dedup" >>$SCRIPT_LOG
-#echo "$DEDUP $COMB_DIR/$PREFIX.bam $THREADS $DEDUP_DIR $FINAL_BAM $SCRIPT_LOG" >>$SCRIPT_LOG
-#echo >>$SCRIPT_LOG
-#$DEDUP $COMB_DIR/$PREFIX.bam $THREADS $DEDUP_DIR $FINAL_BAM $SCRIPT_LOG
-#echo >>$SCRIPT_LOG
+$DEDUP $COMB_DIR/$PREFIX.bam $THREADS $DEDUP_DIR $FINAL_BAM $SCRIPT_LOG
+echo >>$SCRIPT_LOG
 
 echo "### Finished Mapping!" >>$SCRIPT_LOG
 echo >>$SCRIPT_LOG
